@@ -1,2 +1,2 @@
 # videojuego
-Videojuego demo construido con la biblioteca Phaser
+Videojuego demo construído con la biblioteca Phaser en el año 2017.
