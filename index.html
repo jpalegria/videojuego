@@ -1,0 +1,359 @@
+<html lang=es>
+<head>
+	<meta charset="UTF-8">
+	<title>Juego con Phaser</title>
+    <author>Juan Alegría jalegria.trabajo@gmail.com - 2017</author>
+	<script type="text/javascript" src="recursos/js/phaser.min.js"></script>
+	<link href="recursos/fuente/Bungee-Regular.ttf" rel="stylesheet"> 
+	<style type="text/css">
+		body {
+			margin: 0;
+		}
+		@font-face {
+			font-family: "Bungee-Regular";
+			font-style: normal;
+			font-weight: 400;
+			src: url("recursos/fuente/Bungee-Regular.ttf");
+		}
+	</style>
+</head>
+<body>
+	<script type="text/javascript">
+		//ancho: 800px; alto: 600px;
+		var game = new Phaser.Game(800, 600, Phaser.AUTO, '',
+		 { preload: preload, create: create, update: update});
+		 
+		 function preload(){
+			game.load.image('cielo', 'recursos/img/sky.png');
+			game.load.image('suelo', 'recursos/img/platforma2.png');
+			game.load.image('estrella', 'recursos/img/star.png');
+			game.load.spritesheet('marciano', 'recursos/img/dude.png', 32, 48);
+			game.load.spritesheet('monstruo', 'recursos/img/monstruo.png', 48,48);
+			 //https://phaser.io/examples/v2/audio/audio-sprite-json
+			audioConfigJSON = { //esta definicion podria esta afuera o en otra funcion
+			  spritemap: { //debe ir obligatoriamente la clave 'spritemap': formato: https://github.com/tonistiigi/audiosprite
+				'alien': { start: 1, end: 2, loop: false },
+				'lazer': { start: 3, end: 3.5, loop: false },
+				'escape': { start: 4, end: 7.2, loop: false },
+				'miau': { start: 8, end: 8.5, loop: false },
+				'teclado': { start: 9, end: 9.1, loop: false },
+				'ping': { start: 10, end: 11, loop: false },
+				'desintegracion': { start: 12, end: 16.2, loop: false },
+				'disparo': { start: 17, end: 18, loop: false },
+				'pinia': { start: 19, end: 19.3, loop: false }
+			  }
+			};
+			//audioSprite(key, urls [, jsonConfigURL] [, jsonConfigFile] [, autoDecode]); solo puede haber un archivo de configuracion.
+			game.load.audiosprite('sfx', 'recursos/audio/efectos/mezcla_sfx.mp3', null, audioConfigJSON);
+			game.load.audio('disparo', 'recursos/audio/efectos/blaster.mp3');
+			game.load.audio('salto', 'recursos/audio/efectos/salto.wav');
+			game.load.audio('musica', 'recursos/audio/musica/ambiente.wav');
+			game.load.image('particula', 'recursos/img/particula.png');
+			game.load.image('particulaRoja', 'recursos/img/particulaRoja.png');
+			game.load.image('bala', 'recursos/img/bala.png');
+
+		 }
+		 
+		 function create(){
+			 //VALORES CONSTANTES
+			 items_cant = 12;
+			 items_valor = 10;
+			 monstruo_valor = 15;
+			 relojTiempo = 30;
+			 items_recoletados = 0;
+			 			 
+			 //Se va utilizar un motor de "fisica" en el juego, entonces se debe
+			 // habilitar esta caracteristica con un Sistema de Fisica
+			 // que se va usar. Arcade Physics, Ninja Physics, P2.JS Full-Body Physics.
+			 game.physics.startSystem(Phaser.Physics.ARCADE);
+			 
+			 //AGREGADO ELEMENTOS
+			 game.add.sprite(0,0, 'cielo');
+			 //game.add.sprite(0, 0, 'estrella');
+			 plataformas = game.add.group(); //administra grupos de sprite similares.-
+			 plataformas.enableBody = true; //todos los elementos que se creen de  este grupo será afectado por la fisica del juego.
+			 suelo = plataformas.create(0, game.world.height -64, 'suelo'); //sprite de suelo es: 400x32 y el ancho del display-surf del juego es 800.-
+			 suelo.scale.setTo(2,2); //agranda el sprite a una escala determinada.-
+			 suelo.body.immovable = true; //para que no se mueva cuando este el personaje. Recordar que es afectado por la fisica del juego.-
+			 repisa1 = plataformas.create(400, 400, 'suelo');
+			 repisa1.body.immovable = true;
+			 repisa2 = plataformas.create(-150, 250, 'suelo'); //se va a ver solo 250px de esta plataforma(es la mas alta)
+			 repisa2.body.immovable = true;
+			 
+			 //AGREGADO PERSONAJE
+			 //La SpriteSheet se marco como 32x48
+			 personaje = game.add.sprite(32, game.world.height - 150, 'marciano');
+		 
+			 game.physics.arcade.enable(personaje); //Se habilita la fisica del juego para personaje
+			 //Al darle fisica, el sprite tiene al atributo body que le modifica la fisica: ArcadePhysics.Body
+			 personaje.body.bounce.y = 0.2; //le agrega rebote sobre el eje y
+			 personaje.body.gravity.y = 350; //peso del personaje sobre el eje y
+			 personaje.body.collideWorldBounds = true; //Permite hacer colisionar al sprite con los limites de la pantalla como si fuera una pared
+			 
+			 //Se agrega animaciones para caminar a la izquierda y derecha
+			 //add(name, frames, frameRate, loop, useNumericIndex) 
+			 personaje.animations.add('izq', [0,1,2,3], 10, true);
+			 personaje.animations.add('der', [5,6,7,8], 10, true);
+			 
+			 //AGREGADO MONSTRUO
+			 monstruos = game.add.group();
+			 monstruos.enableBody = true;
+			 //monstruos.setAll('body.immovable', true); NO FUNCIONA
+			 monstruo1 = monstruos.create(22, repisa2.y - 75, 'monstruo'); //64 = 32px (el alto de la repisa) + 32px
+			 monstruo2 = monstruos.create(704, repisa1.y -75, 'monstruo');
+			 monstruo1.body.immovable = true;
+			 monstruo2.body.immovable = true;
+			 interpolacion1 = game.add.tween(monstruo1);
+			 //to(properties [, duration(milisegundos) = 1000] [, ease = null] [, autoStart = false ] [, delay=0] [, repeat=0(-1: infinito)] [, yoyo = false]) 
+			 interpolacion1.to({x: 202}, 4000, Phaser.Easing.Circular.InOut, true, 0, -1); //tipos de interpolacion : https://photonstorm.github.io/phaser-ce/Phaser.Easing.html
+			 interpolacion1.yoyo(true);
+			 interpolacion2 = game.add.tween(monstruo2);
+			 interpolacion2.to({x : 448}, 4000, Phaser.Easing.Sinusoidal.Out, true, 0, -1, true);
+
+			 
+			 /*
+			 var interpolacionData = { x :0, y :0 };
+			 interpolacion = game.make.tween(interpolacionData).to( { x :1, y :4 }, 3000, "Sine.easeInOut");
+			 interpolacion.yoyo(true);
+			 data = interpolacion.generateData(60);
+			 indice = 0;
+			 */
+			 
+			 //ESTRELLAS
+			 estrellas = game.add.group();
+			 estrellas.enableBody = true;
+			 for(var i = 0; i < items_cant; i++){
+				 var estrellita = estrellas.create(i*70, 0, 'estrella');
+				 estrellita.body.gravity.y = 300;
+				 estrellita.body.bounce.y = 0.7 + Math.random() * 0.2;
+			 }
+			 		 
+			 //PUNTAJE
+			 puntos = 0;
+			 txtPuntos = game.add.text(15, 15, 'Puntaje: 0',
+			  {
+				  font: 'Bungee-Regular',
+				  fontSize : '32px',
+				  fill : '#000000'
+			  }
+			 );
+			 
+			 //SONIDOS
+			 //agrega el sprite de audio a una variable para que este disponible en el loop principal
+			 efectos = game.add.audioSprite('sfx');
+			 efectos.allowMultiple = true;
+		 	 
+		 	 efectoDisparo = game.add.audio('disparo');
+			 efectoDisparo.allowMultiple = true;
+			 efectoDisparo.volume = 0.07;
+			 
+			 efectoSalto = game.add.audio('salto');
+			 efectoSalto.allowMultiple = true;
+			 efectoSalto.volume = 0.05;
+			 
+			 //MUSICA
+			 musica = game.add.audio('musica');
+			 musica.volume = 0.4;
+			 musica.play();
+		 	 		 	 
+			 //ARMA
+			arma = game.add.weapon(30, 'bala'); //weapon( [quantity] [, key] [, frame] [, group] [, bulletClass]) La cantidad es importante pq limita los disparos seguidos
+			arma.bullets.setAll('scale.x', 2); //Setea la propiedad de todos los elementos del grupo: Bullet Obj->scale (atributo)->(Point obj ->x, y)
+			arma.bullets.setAll('scale.y', 2); 
+			arma.bulletKillType = Phaser.Weapon.KILL_WORLD_BOUNDS; //El objeto bala finaliza cuando supera el limite de la pantalla del juego.
+			arma.bulletSpeed = 800;
+			arma.trackSprite(personaje, 0, 36); //trackSprite(sprite [, offsetX] [, offsetY] [, trackRotation]) 
+			
+			//TIEMPO
+			reloj = game.add.text(game.world.centerX, 25, relojTiempo, {
+				font: 'Bungee-Regular',
+			    fontSize : '50px',
+			    fill : '#F5F5F5'
+			});
+			//El anchor establece el punto de origen de la textura. El valor predeterminado (0, 0) es la parte superior izquierda. (0.5, 0.5) es el centro. (1, 1) es la parte inferior derecha.
+            reloj.anchor.setTo(0.5, 0.5);
+            temporizador = game.time.events.loop(Phaser.Timer.SECOND, cuentaRegresiva, this, personaje); //Phaser.Timer.loop(delay, callback, callbackContext, arguments) 
+		 }
+
+		 
+		 /*
+		 *
+		 *FUNCION UPDATE
+		 *
+		 */
+		 function update(){
+			 //Hace que el personaje colisione con el grupo de plataformas
+			 //Al ser el grupo de plataformas inamovibles, estas no se va mover.
+			 var golpearPlataforma = game.physics.arcade.collide(personaje, plataformas);
+			 
+			 //Hace que colisionen el grupo de estrellas con el grupo de plataformas
+			 golpearEstrellas = game.physics.arcade.collide(estrellas, plataformas);
+		 
+			 
+			 //MOVIENTO DEL PERSONAJE
+			 //event-listeners para el cursor del teclado
+			 cursores = game.input.keyboard.createCursorKeys();
+			 //crea el boton de disparo
+			 btnDisparo = game.input.keyboard.addKey(Phaser.KeyCode.SPACEBAR);
+			 			 
+			 //resetea la velocidad del pj en cada loop
+			 personaje.body.velocity.x = 0;
+			 
+			 //CAMINAR
+			 if(cursores.left.isDown){
+				personaje.body.velocity.x = -200;
+				personaje.animations.play('izq'); 
+			 }else if(cursores.right.isDown){
+				 personaje.body.velocity.x = 200;
+				 personaje.animations.play('der');
+			 }else{
+				 personaje.animations.stop();
+				 personaje.frame = 4;
+			 }
+			 //SALTO
+			 //Permite al personaje saltar si el pj esta tocando una
+			 // plataforma y esta activada las colisiones del grupo de plataformas
+			 if(cursores.up.isDown && personaje.body.touching.down &&
+			  golpearPlataforma){
+				  personaje.body.velocity.y = -325; //recordar que el punto (0,0) es la esquina superior izquierda, por eso va en negativo el nro, para subir
+				  efectoSalto.play();
+			 }
+			 
+			 //DISPARO
+			 //Permite disparar al personaje
+			 if(btnDisparo.isDown){
+				 if(personaje.frame < 4 || cursores.left.isDown){			
+					arma.fireAngle = Phaser.ANGLE_LEFT;
+					arma.trackOffset.x = 0;
+					efectoDisparo.play();
+				    arma.fire();
+				 }else if(personaje.frame > 4 || cursores.right.isDown){
+					arma.fireAngle = Phaser.ANGLE_RIGHT;
+					arma.trackOffset.x = 32;
+					efectoDisparo.play();
+ 				    arma.fire();
+				 }
+			 }
+			 
+			 //JUNTAR ITEMS
+			 //overlap(object1, object2 [, overlapCallback] [, processCallback] [, callbackContext])
+			 // overlapCallback: Funcion que se llama si se solapan ambos objetos;
+			 game.physics.arcade.overlap(personaje, estrellas, recoletarEstrella, null, this);
+			
+			//COLISIONES MONSTRUO
+			//collide(object1, object2 [, collideCallback] [, processCallback] [, callbackContext]) 
+			var golpearEstrellasMonstruos = game.physics.arcade.collide(monstruos, estrellas);
+			var golpearPjMonstruos = game.physics.arcade.collide(monstruos, personaje, GolpearPj, null, this);
+			var dispararBalaMonstruo = game.physics.arcade.collide(arma.bullets, monstruos, dispararMonstruo, null, this);
+			//console.log(monstruo.body.x); // = monstruo.body.x +1;
+			//console.log(monstruo.body.y); // = monstruo.body.x +1;
+			/*
+			monstruo.body.x = monstruo.body.x + data[indice].x;
+			monstruo.body.y = monstruo.body.y + data[indice].y;
+
+			indice++;
+			
+			if(indice === data.length){
+				indice = 0
+			}*/
+		}
+		 
+		 /*
+		 *
+		 * FUNCIONES VARIAS
+		 *
+		 */
+		 function recoletarEstrella(pj, star){
+			 star.kill(); //Remueve la estrella de la pantalla
+			 items_recoletados++;
+			 puntos += items_valor;
+			 txtPuntos.text = 'Puntaje: ' + puntos;
+			 efectos.play('ping');
+			 if(items_recoletados == items_cant){
+				 sonido = efectos.get('teclado');//individualiza un efecto;
+				 sonido.play('teclado');
+				 game.add.text(game.world.centerX, 150, "¡GANASTE!", {
+					  font: 'Bungee-Regular',
+					  fontSize : '90px',
+					  fill : '#fcc808'
+				  }).anchor.setTo(0.5, 0.5);
+
+				sonido.onStop.add(function(){ //para que termine de sonar el sonido
+					game.paused = true; //Detiene el juego en este caso
+				});
+			 }
+		 }
+		 
+		 function GolpearPj(pj, monstruo){
+			sonido = efectos.get('alien');//individualiza un efecto;
+			sonido.play('alien');
+
+			pj.kill();
+			game.add.text(game.world.centerX, 150, "¡PERDISTE!", {
+			  font: 'Bungee-Regular',
+			  fontSize : '90px',
+			  fill : '#8B0000'
+			}).anchor.setTo(0.5, 0.5);
+			  //PARTICULAS
+			 //new Emitter(game, x, y, maxParticles)
+			 var emisorParticulas = game.add.emitter(pj.x, pj.y, 100);
+			 emisorParticulas.makeParticles('particula');
+			 emisorParticulas.minParticleSpeed.setTo(-100, -100);
+			 emisorParticulas.maxParticleSpeed.setTo(300, 300);
+			 emisorParticulas.gravity = 0;
+			 emisorParticulas.start(true, 800, null, 100);
+			 sonido.onStop.add(function(){ //para que termine de sonar el sonido
+				emisorParticulas.exists = false; 
+				game.paused = true; //Detiene el juego en este caso
+			});
+		 }
+		 
+		 function dispararMonstruo(bala, monstruo){
+			sonido = efectos.get('lazer');//individualiza un efecto;
+			sonido.play('lazer');
+			bala.kill();
+			monstruo.kill();
+			puntos += monstruo_valor;
+			txtPuntos.text = "Puntaje:" + puntos;
+			var emisorParticulas = game.add.emitter(monstruo.x, monstruo.y, 100);
+			 emisorParticulas.makeParticles('particulaRoja');
+			 emisorParticulas.minParticleSpeed.setTo(-100, -100);
+			 emisorParticulas.maxParticleSpeed.setTo(300, 300);
+			 emisorParticulas.gravity = 0;
+			 emisorParticulas.start(true, 800, null, 100);
+		 }
+		 
+		 function cuentaRegresiva(pj){
+			relojTiempo--;
+			reloj.text = relojTiempo;
+			if(relojTiempo == 0){
+				sonido = efectos.get('alien');//individualiza un efecto;
+			    sonido.play('alien');
+
+				pj.kill();
+				mensaje = game.add.text(game.world.centerX, 150, "¡PERDISTE!", {
+				  font: 'Bungee-Regular',
+				  fontSize : '90px',
+				  fill : '#8B0000'
+				});
+				mensaje.anchor.setTo(0.5, 0.5); //centra el texto
+				
+				  //PARTICULAS
+				 //new Emitter(game, x, y, maxParticles)
+				 var emisorParticulas = game.add.emitter(pj.x, pj.y, 100);
+				 emisorParticulas.makeParticles('particula');
+				 emisorParticulas.minParticleSpeed.setTo(-100, -100);
+				 emisorParticulas.maxParticleSpeed.setTo(300, 300);
+				 emisorParticulas.gravity = 0;
+				 emisorParticulas.start(true, 800, null, 100);
+				 sonido.onStop.add(function(){ //para que termine de sonar el sonido
+					emisorParticulas.exists = false; 
+					game.paused = true; //Detiene el juego en este caso
+				 });
+				game.time.events.stop();
+		   }
+		 }
+
+	</script>
+</body>
+</html>
